@@ -127,26 +127,64 @@ async function saveToGoogle(){
   }
 }
 
-async function loadFromGoogle(){
-  try{
-    const r=await fetch(API_URL+'?action=carregar&ts='+Date.now(),{cache:'no-store'});
-    const j=await r.json();
-    if(j&&j.sucesso&&j.dados&&typeof j.dados==='object'){
-      db={
-        checklist:Array.isArray(j.dados.checklist)?j.dados.checklist:[],
-        quadras:Array.isArray(j.dados.quadras)?j.dados.quadras:[],
-        oficios:Array.isArray(j.dados.oficios)?j.dados.oficios:[],
-        documentos:Array.isArray(j.dados.documentos)?j.dados.documentos:[],
-        materiais:Array.isArray(j.dados.materiais)?j.dados.materiais:[],
-        equipe:Array.isArray(j.dados.equipe)?j.dados.equipe:[]
-      };
-      localStorage.setItem(KEY,JSON.stringify(db));
-      apiOnline=true;
-      renderAll();
-    }
-  }catch(e){
-    apiOnline=false;
+function aplicarBancoGoogle(j){
+  if(j&&j.sucesso&&j.dados&&typeof j.dados==='object'){
+    db={
+      checklist:Array.isArray(j.dados.checklist)?j.dados.checklist:[],
+      quadras:Array.isArray(j.dados.quadras)?j.dados.quadras:[],
+      oficios:Array.isArray(j.dados.oficios)?j.dados.oficios:[],
+      documentos:Array.isArray(j.dados.documentos)?j.dados.documentos:[],
+      materiais:Array.isArray(j.dados.materiais)?j.dados.materiais:[],
+      equipe:Array.isArray(j.dados.equipe)?j.dados.equipe:[]
+    };
+    localStorage.setItem(KEY,JSON.stringify(db));
+    apiOnline=true;
+    renderAll();
+    return true;
   }
+  return false;
+}
+
+function loadFromGoogle(){
+  return new Promise(function(resolve){
+    const callbackName='__jogosRedeCB_'+Date.now();
+    let script=document.createElement('script');
+    let finished=false;
+    const timer=setTimeout(function(){
+      if(finished)return;
+      finished=true;
+      cleanup();
+      apiOnline=false;
+      resolve(false);
+    },10000);
+
+    window[callbackName]=function(j){
+      if(finished)return;
+      finished=true;
+      clearTimeout(timer);
+      aplicarBancoGoogle(j);
+      cleanup();
+      resolve(true);
+    };
+
+    function cleanup(){
+      try{delete window[callbackName]}catch(e){window[callbackName]=undefined}
+      if(script&&script.parentNode)script.parentNode.removeChild(script);
+    }
+
+    script.onerror=function(){
+      if(finished)return;
+      finished=true;
+      clearTimeout(timer);
+      cleanup();
+      apiOnline=false;
+      resolve(false);
+    };
+
+    script.src=API_URL+'?action=carregar&callback='+encodeURIComponent(callbackName)+'&ts='+Date.now();
+    script.async=true;
+    document.head.appendChild(script);
+  });
 }
 function toggleMobileMenu(){document.querySelector('.side').classList.toggle('open');document.getElementById('mobileOverlay').classList.toggle('open')}
 function closeMobileMenu(){document.querySelector('.side').classList.remove('open');document.getElementById('mobileOverlay').classList.remove('open')}
