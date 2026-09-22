@@ -33,7 +33,7 @@
 
 <div class="mobile-overlay" id="mobileOverlay" onclick="closeMobileMenu()"></div>
 <main class="main">
-<div class="top"><button class="mobile-menu" id="mobileMenu" aria-label="Abrir menu" onclick="toggleMobileMenu()">☰</button><div><h1 id="title">Dashboard</h1><div class="date">Sistema de organização do evento</div></div><button class="btn" onclick="window.print()">🖨️ Imprimir</button></div>
+<div class="top"><button class="mobile-menu" id="mobileMenu" aria-label="Abrir menu" onclick="toggleMobileMenu()">☰</button><div><h1 id="title">Dashboard</h1><div class="date">Sistema de organização do evento</div></div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end"><span id="saveStatus" class="hint">Alterações locais</span><button class="btn green" id="saveButton" onclick="saveNow()">💾 Salvar alterações</button><button class="btn" onclick="window.print()">🖨️ Imprimir</button></div></div>
 
 <section id="dashboard" class="page active">
 <div class="cards">
@@ -107,13 +107,30 @@ let db=JSON.parse(localStorage.getItem(KEY)||'null')||JSON.parse(JSON.stringify(
 let apiOnline=false;
 let saveTimer=null;
 
-function save(){
-  localStorage.setItem(KEY,JSON.stringify(db));
-  clearTimeout(saveTimer);
-  saveTimer=setTimeout(saveToGoogle,250);
+function atualizarStatusSalvamento(texto){
+  const el=document.getElementById('saveStatus');
+  if(el) el.textContent=texto;
 }
 
-async function saveToGoogle(){
+function save(){
+  localStorage.setItem(KEY,JSON.stringify(db));
+  atualizarStatusSalvamento('Alterações locais');
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(function(){
+    saveToGoogle(false);
+  },250);
+}
+
+async function saveToGoogle(manual){
+  if(manual){
+    const botao=document.getElementById('saveButton');
+    if(botao){
+      botao.disabled=true;
+      botao.textContent='⏳ Salvando...';
+    }
+    atualizarStatusSalvamento('Enviando para o Google Sheets...');
+  }
+
   try{
     await fetch(API_URL,{
       method:'POST',
@@ -121,10 +138,40 @@ async function saveToGoogle(){
       headers:{'Content-Type':'text/plain;charset=utf-8'},
       body:JSON.stringify({acao:'salvarBanco',dados:db})
     });
+
     apiOnline=true;
+    localStorage.setItem(KEY,JSON.stringify(db));
+    atualizarStatusSalvamento('✅ Salvo no Google Sheets');
+
+    if(manual){
+      const botao=document.getElementById('saveButton');
+      if(botao){
+        botao.disabled=false;
+        botao.textContent='💾 Salvar alterações';
+      }
+    }
+
+    return true;
+
   }catch(e){
     apiOnline=false;
+    atualizarStatusSalvamento('⚠️ Não foi possível sincronizar');
+
+    if(manual){
+      const botao=document.getElementById('saveButton');
+      if(botao){
+        botao.disabled=false;
+        botao.textContent='💾 Tentar novamente';
+      }
+    }
+
+    return false;
   }
+}
+
+async function saveNow(){
+  clearTimeout(saveTimer);
+  await saveToGoogle(true);
 }
 
 function aplicarBancoGoogle(j){
